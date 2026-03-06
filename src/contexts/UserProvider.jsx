@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useState, useEffect } from "react";
 import { UserContext } from "./UserContext";
 
 export function UserProvider({ children }) {
@@ -6,8 +6,39 @@ export function UserProvider({ children }) {
   const API_URL = import.meta.env.VITE_API_URL;
   const [user, setUser] = useState(initialUser);
 
+  useEffect(() => {
+    const session = sessionStorage.getItem("session");
+    if (session) {
+      setUser(JSON.parse(session));
+      // Re-verify with server on refresh
+      fetch(`${API_URL}/api/user/profile`, { credentials: "include" })
+        .then(res => {
+          if (!res.ok) {
+            sessionStorage.removeItem("session");
+            setUser(initialUser);
+            return null;
+          }
+          return res.json();
+        })
+        .then(profile => {
+          if (!profile) return;
+          const refreshedUser = {
+            isLoggedIn: true,
+            name: profile.username,
+            email: profile.email,
+            role: profile.role
+          };
+          setUser(refreshedUser);
+          sessionStorage.setItem("session", JSON.stringify(refreshedUser));
+        })
+        .catch(() => {
+          sessionStorage.removeItem("session");
+          setUser(initialUser);
+        });
+    }
+  }, []);
+
   const login = async (email, password) => {
-    // MODIFIED: Implemented login
     try {
       const res = await fetch(`${API_URL}/api/user/login`, {
         method: "POST",
@@ -29,7 +60,7 @@ export function UserProvider({ children }) {
         role: profile.role
       };
       setUser(newUser);
-      localStorage.setItem("session", JSON.stringify(newUser));
+      sessionStorage.setItem("session", JSON.stringify(newUser));
       return true;
     } catch (e) {
       return false;
@@ -43,7 +74,7 @@ export function UserProvider({ children }) {
     });
     const newUser = { isLoggedIn: false, name: '', email: '', role: '' };
     setUser(newUser);
-    localStorage.setItem("session", JSON.stringify(newUser));
+    sessionStorage.removeItem("session");
   };
 
   return (
